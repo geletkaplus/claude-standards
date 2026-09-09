@@ -4,7 +4,7 @@
     "geletkaplus": {
       "source": {
         "source": "github",
-        "repo": "OWNER/claude-standards"
+        "repo": "geletkaplus/claude-standards"
       }
     }
   },
