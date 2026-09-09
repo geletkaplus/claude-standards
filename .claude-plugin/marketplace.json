@@ -1,0 +1,15 @@
+{
+  "name": "geletkaplus",
+  "owner": {
+    "name": "Geletkaplus",
+    "email": "doug@geletkaplus.com"
+  },
+  "plugins": [
+    {
+      "name": "ship-standards",
+      "source": "./plugins/ship-standards",
+      "version": "0.1.0",
+      "description": "House production standards, injected automatically into every session."
+    }
+  ]
+}

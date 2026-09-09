@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy this to .claude/settings.json in a client repo and commit it. Anyone who opens the repo in Claude Code gets the standards plugin automatically, with no install step. Replace OWNER/REPO with wherever you push claude-standards.",
+  "extraKnownMarketplaces": {
+    "geletkaplus": {
+      "source": {
+        "source": "github",
+        "repo": "OWNER/claude-standards"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ship-standards@geletkaplus": true
+  }
+}

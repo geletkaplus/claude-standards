@@ -1,0 +1,15 @@
+{
+  "name": "ship-standards",
+  "version": "0.1.0",
+  "description": "Geletkaplus production standards. Injects the house build rules into every Claude Code session automatically, and scaffolds compliant project CLAUDE.md files.",
+  "author": {
+    "name": "Geletkaplus",
+    "email": "doug@geletkaplus.com"
+  },
+  "keywords": [
+    "standards",
+    "accessibility",
+    "code-quality",
+    "hooks"
+  ]
+}
