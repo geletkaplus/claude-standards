@@ -58,6 +58,7 @@ it sounds: the fastest way to make people ignore checks is to have local pass an
 | `placeholders` | lorem ipsum, filler latin, `555-555-5555`, `example@example.com`, `John Doe`, unreplaced template copy | always |
 | `placeholders` | unresolved `[TKTK: ...]` markers | done only |
 | `units` | `px` outside hairlines, outlines, shadows, and media queries | always |
+| `units` | `px` or `rem` on `letter-spacing` / `word-spacing`, which want `em` | always |
 | `dependencies` | `^`, `~`, `latest`, wildcards and open ranges in package.json | always |
 | `env` | `process.env.X` / `import.meta.env.X` missing from `.env.example` | always |
 
@@ -69,7 +70,8 @@ Two exemptions worth knowing about, both there so the checks stay worth listenin
   line exempts anything else deliberately.
 - `units` exempts a declaration, not a whole line, so
   `padding: 24px; border: 1px solid` is still caught. Media and container queries are
-  exempt outright.
+  exempt outright. Tracking is steered to `em` rather than exempted: it scales with the
+  element's own font size, so `rem` would have to be re-tuned at every type size.
 
 This repo is checked by its own suite. Its README and workflow quote the patterns the
 checks look for, so when the source of truth is present at

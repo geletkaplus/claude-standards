@@ -184,7 +184,11 @@ function checkUnits(file, text, root, stage, findings) {
   if (!isStyle && !isCode) return;
   if (skipSelf(file, root)) return;
 
-  const EXEMPT_PROP = /\b(border|border-[a-z]+|outline|outline-[a-z]+|box-shadow|text-shadow|stroke-width|letter-spacing)\b/i;
+  const EXEMPT_PROP = /\b(border|border-[a-z]+|outline|outline-[a-z]+|box-shadow|text-shadow|stroke-width)\b/i;
+
+  // Tracking is proportional to the type it sits on, so it wants em, not rem and
+  // not px. Handled separately below rather than exempted.
+  const TRACKING_PROP = /\b(letter-?[sS]pacing|word-?[sS]pacing)\b/;
 
   lines(text).forEach((line, i) => {
     if (/@media|@container/.test(line)) return;
@@ -200,6 +204,23 @@ function checkUnits(file, text, root, stage, findings) {
     // any minified output take.
     const offenders = [];
     for (const segment of line.split(/[;{}]/)) {
+      if (TRACKING_PROP.test(segment)) {
+        const tracking = segment.match(/(?<![\w.-])(\d*\.?\d+)(px|rem)\b/g) || [];
+        for (const m of tracking) {
+          if (parseFloat(m) === 0) continue;
+          findings.push({
+            check: 'units',
+            severity: 'error',
+            file: rel(file, root),
+            line: i + 1,
+            message: 'Use em for letter-spacing and word-spacing (' + m +
+              '). Tracking scales with the type it sits on; rem ties it to the root ' +
+              'and has to be re-tuned at every size.',
+            excerpt: segment.trim().slice(0, 120)
+          });
+        }
+        continue;
+      }
       if (EXEMPT_PROP.test(segment)) continue;
       const matches = segment.match(/(?<![\w.-])(\d+(?:\.\d+)?)px\b/g);
       if (!matches) continue;

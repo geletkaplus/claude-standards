@@ -18,6 +18,8 @@ Work is not finished until all of these are true. Only say it is done when they 
 
 - Use `rem` for font sizes, spacing, and layout dimensions. `px` is allowed only for
   hairline borders, outlines, shadow offsets, and 1px rules.
+- Use `em` for `letter-spacing` and `word-spacing`. Tracking is proportional to the type
+  it sits on, so it has to scale with the element's own font size, not the root.
 - Never hardcode a color, font family, spacing step, or breakpoint at the point of use.
   Define it once as a custom property (or the stack's token equivalent) and reference it.
 - Establish the type scale, spacing scale, and color tokens in one file before writing
@@ -76,7 +78,7 @@ WCAG 2.2 AA is the floor, not the target.
   already in the project covers the case.
 - Leave nothing dead behind: no commented-out code, unused files, unused exports, or
   orphaned routes.
-- Follow the naming conventions already in use. Never mix conventions in one repo.
+- Follow the naming conventions already in use. Never mix conventions in one repo. Flag if one feature is called two or more things.
 
 ## When there is no time
 
