@@ -1,0 +1,28 @@
+# Drop this in a client repo at .github/workflows/standards.yml and commit it.
+#
+# Everything is centralised in the claude-standards repo, so you never edit this
+# file again; changing the rules there changes them for every project at once.
+#
+# Pin @main to a tag once the rules settle, so a rule change cannot turn a
+# client's pipeline red without warning.
+#
+# claude-standards is public, so the default job token can check it out and this
+# file works as it stands. If it is ever made private, the default token cannot
+# read it. Create a read-only PAT or GitHub App token, add it to this repo as a
+# secret, and pass it through:
+#
+#   jobs:
+#     standards:
+#       uses: geletkaplus/claude-standards/.github/workflows/checks.yml@main
+#       secrets:
+#         standards_token: ${{ secrets.STANDARDS_READ_TOKEN }}
+
+name: Standards
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  standards:
+    uses: geletkaplus/claude-standards/.github/workflows/checks.yml@main

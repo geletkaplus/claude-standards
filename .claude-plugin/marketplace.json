@@ -8,8 +8,8 @@
     {
       "name": "ship-standards",
       "source": "./plugins/ship-standards",
-      "version": "0.1.0",
-      "description": "House production standards, injected automatically into every session."
+      "version": "0.2.0",
+      "description": "House production standards: injected into every session, enforced on every edit, shared with CI."
     }
   ]
 }

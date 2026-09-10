@@ -1,0 +1,92 @@
+name: Geletkaplus standards
+
+# Reusable workflow. Client repos call this rather than copying the checks, so
+# updating the rules here updates every project at once.
+#
+# In a client repo, .github/workflows/standards.yml is just:
+#
+#   name: Standards
+#   on: [push, pull_request]
+#   jobs:
+#     standards:
+#       uses: geletkaplus/claude-standards/.github/workflows/checks.yml@main
+
+on:
+  workflow_call:
+    inputs:
+      standards-ref:
+        description: Ref of the claude-standards repo to run the checks from.
+        type: string
+        default: main
+      stage:
+        description: '"done" fails on unresolved TKTK markers; "build" tolerates them.'
+        type: string
+        default: done
+      node-version:
+        type: string
+        default: '20'
+    secrets:
+      standards_token:
+        description: >-
+          Read token for the claude-standards repo. Only needed if that repo is
+          private: the calling repo's GITHUB_TOKEN is scoped to itself and cannot
+          check out a different private repository. Use a read-only PAT or a
+          GitHub App token. Leave unset while claude-standards is public.
+        required: false
+
+jobs:
+  standards:
+    name: Production standards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v4
+
+      - name: Check out the standards
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/claude-standards
+          ref: ${{ inputs.standards-ref }}
+          path: .ship-standards
+          token: ${{ secrets.standards_token || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Run the checks
+        id: checks
+        run: |
+          set +e
+          node .ship-standards/plugins/ship-standards/checks/run-checks.js \
+            --all --stage "${{ inputs.stage }}" --root "$GITHUB_WORKSPACE" \
+            > check-output.txt 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          cat check-output.txt
+
+      - name: Write the job summary
+        if: always()
+        run: |
+          {
+            echo "## Geletkaplus production standards"
+            echo
+            if [ "${{ steps.checks.outputs.exit_code }}" = "0" ]; then
+              echo "Clean. Nothing outstanding."
+            else
+              echo "This branch is not production ready. Every item below has to be"
+              echo "resolved before it ships."
+              echo
+              echo '```'
+              cat check-output.txt
+              echo '```'
+              echo
+              echo "Rules live in \`standards/ship-standards.md\` in the claude-standards repo."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if the standards are not met
+        if: steps.checks.outputs.exit_code != '0'
+        run: |
+          echo "Standards checks failed. See the job summary for the full list."
+          exit 1
