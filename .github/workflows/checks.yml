@@ -22,6 +22,12 @@ on:
         description: '"done" fails on unresolved TKTK markers; "build" tolerates them.'
         type: string
         default: done
+      fail-on:
+        description: >-
+          Lowest severity that fails the build: "must" (default) or "should".
+          Raise it once a project is clean and you want to hold the line.
+        type: string
+        default: must
       node-version:
         type: string
         default: '20'
@@ -60,7 +66,8 @@ jobs:
         run: |
           set +e
           node .ship-standards/plugins/ship-standards/checks/run-checks.js \
-            --all --stage "${{ inputs.stage }}" --root "$GITHUB_WORKSPACE" \
+            --all --stage "${{ inputs.stage }}" --fail-on "${{ inputs.fail-on }}" \
+            --root "$GITHUB_WORKSPACE" \
             > check-output.txt 2>&1
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
           cat check-output.txt

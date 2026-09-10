@@ -1,5 +1,6 @@
 {
   "name": "geletkaplus",
+  "description": "Geletkaplus house production standards for Claude Code.",
   "owner": {
     "name": "Geletkaplus",
     "email": "doug@geletkaplus.com"
@@ -8,8 +9,9 @@
     {
       "name": "ship-standards",
       "source": "./plugins/ship-standards",
-      "version": "0.2.0",
-      "description": "House production standards: injected into every session, enforced on every edit, shared with CI."
+      "version": "0.3.0",
+      "description": "House production standards: injected, tiered, enforced on every edit, and shared with CI."
     }
-  ]
+  ],
+  "description": "House production standards: injected, tiered, enforced on every edit, and shared with CI."
 }

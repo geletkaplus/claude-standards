@@ -1,6 +1,6 @@
 {
   "name": "ship-standards",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Geletkaplus production standards. Injects the house build rules into every Claude Code session, blocks edits and completion that violate them, and scaffolds compliant project CLAUDE.md files. Shares one check suite with CI.",
   "author": {
     "name": "Geletkaplus",

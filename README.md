@@ -14,7 +14,9 @@ claude-standards/
 ├── .github/workflows/checks.yml          reusable CI workflow, called by client repos
 └── plugins/ship-standards/
     ├── .claude-plugin/plugin.json
-    ├── standards/ship-standards.md       the rules themselves (single source of truth)
+    ├── standards/
+    │   ├── ship-standards.md             the rules themselves (single source of truth)
+    │   └── platforms/*.md                per-stack overlays, layered on the base
     ├── checks/run-checks.js              every mechanical check, one implementation
     ├── hooks/hooks.json                  wires the hooks to four events
     ├── scripts/inject-standards.js       puts the rules into context automatically
@@ -37,12 +39,12 @@ re-injects the full ruleset when a prompt looks like it will produce code, throt
 most once every twelve prompts. Nobody has to invoke, remember, or read anything.
 
 **Violations blocked as they happen.** A `PostToolUse` hook checks each file the moment it
-is written and refuses the edit if it breaks a rule, while there is still context to fix it
+is written and refuses the edit on a `must`, while there is still context to fix it
 cheaply. It runs at `build` stage, so `[TKTK: ...]` markers are legal here.
 
 **Completion blocked while anything is outstanding.** A `Stop` hook runs the full suite over
-the repo at `done` stage, unresolved `TKTK` markers included, and refuses to let the session
-report itself finished until it is clean.
+the repo at `done` stage, unresolved `TKTK` markers included. A `must` blocks outright; a
+`should` blocks once, so it gets named rather than quietly skipped.
 
 **CI as the gate that cannot be bypassed.** The first three run on someone's machine and can
 be turned off. CI runs on push, is controlled entirely by whoever owns the repo, and does not
@@ -51,39 +53,104 @@ care which tool wrote the code.
 Local hooks and CI run the identical script, so they cannot disagree. That matters more than
 it sounds: the fastest way to make people ignore checks is to have local pass and CI fail.
 
+## Severity
+
+Every rule carries a tier, so the tool can be strict about the things that matter and
+quiet about the things that are judgment calls.
+
+| Tier | Blocks an edit | Blocks completion | Fails CI |
+|---|---|---|---|
+| `must` | yes | yes | yes |
+| `should` | no | surfaced once, to be named out loud | only with `fail-on: should` |
+| `consider` | no | no | no |
+
+A `should` is not permission to skip a rule. It is permission to skip it *out loud*.
+The `Stop` gate blocks once on outstanding `should` findings, which forces them to be
+named rather than quietly dropped, then lets the session proceed.
+
 ## What gets checked
 
-| Check | Catches | Stage |
+| Rule | Tier | Catches |
 |---|---|---|
-| `placeholders` | lorem ipsum, filler latin, `555-555-5555`, `example@example.com`, `John Doe`, unreplaced template copy | always |
-| `placeholders` | unresolved `[TKTK: ...]` markers | done only |
-| `units` | `px` outside hairlines, outlines, shadows, and media queries | always |
-| `units` | `px` or `rem` on `letter-spacing` / `word-spacing`, which want `em` | always |
-| `dependencies` | `^`, `~`, `latest`, wildcards and open ranges in package.json | always |
-| `env` | `process.env.X` / `import.meta.env.X` missing from `.env.example` | always |
+| `placeholders/fabricated` | must | lorem ipsum, filler latin, `555-555-5555`, `John Doe`, unreplaced template copy |
+| `placeholders/tktk` | must | unresolved `[TKTK: ...]` markers (at `done` stage only) |
+| `units/px` | must | `px` outside hairlines, outlines, shadows, and media queries |
+| `units/tracking` | consider | `px` or `rem` on `letter-spacing` / `word-spacing`, which want `em` |
+| `dependencies/unpinned` | should | `^`, `~`, `latest`, wildcards and open ranges |
+| `dependencies/package-manager` | should | a stray `package-lock.json` or `yarn.lock`, or a non-pnpm `packageManager` |
+| `env/undeclared` | should | `process.env.X` missing from `.env.example` |
 
-Two exemptions worth knowing about, both there so the checks stay worth listening to:
+`units/px` is a must because fixed pixel sizing ignores the reader's font-size setting,
+which makes it an accessibility problem rather than a matter of taste.
 
-- `env` ignores platform and runtime variables (`PORT`, `CI`, `NODE_ENV`, `VERCEL_*`,
-  `GITHUB_*`, `npm_*`, and the like). Nobody puts those in `.env.example`, and flagging
-  them made the check fire on every config file. A `ship-standards:ignore` comment on the
-  line exempts anything else deliberately.
-- `units` exempts a declaration, not a whole line, so
-  `padding: 24px; border: 1px solid` is still caught. Media and container queries are
-  exempt outright. Tracking is steered to `em` rather than exempted: it scales with the
-  element's own font size, so `rem` would have to be re-tuned at every type size.
-
-This repo is checked by its own suite. Its README and workflow quote the patterns the
-checks look for, so when the source of truth is present at
-`plugins/ship-standards/standards/ship-standards.md`, its own docs and plugin directory
-are skipped. That detection does not match in a client repo, where everything is checked.
+`env` skips platform and runtime variables (`PORT`, `CI`, `VERCEL_*`, `GITHUB_*`, `npm_*`),
+because nobody declares those. `units` exempts a single declaration rather than a whole
+line, so `padding: 24px; border: 1px solid` is still caught.
 
 Run it by hand any time:
 
 ```bash
 node plugins/ship-standards/checks/run-checks.js --all --root /path/to/project
 node plugins/ship-standards/checks/run-checks.js --all --stage build --json
+node plugins/ship-standards/checks/run-checks.js --all --fail-on should
 ```
+
+## Platform overlays
+
+The base rules are universal. Each platform adds its own on top, from
+`standards/platforms/`: Next.js, WordPress, Astro, Shopify, Ghost, and Wix.
+
+The platform comes from `.claude/ship-standards.json`, falling back to detection
+(`next.config.*`, `wp-config.php`, `astro.config.*`, `config/settings_schema.json`,
+`engines.ghost`, and so on). Explicit always wins, because a rescue project often carries
+the fingerprints of two stacks at once.
+
+The Wix overlay is deliberately mostly subtraction. Content honesty and accessibility
+still apply in full; the build, dependency, and unit rules mostly do not, because there is
+no build to control. Saying so plainly beats pretending, which just teaches people to
+ignore the tool.
+
+## Exceptions
+
+Three ways a rule stops applying, in order of preference.
+
+**Platform.** If the stack genuinely cannot do it, the overlay handles it. No per-project
+work.
+
+**Waiver.** Someone decides a rule does not apply to this project, and signs for it:
+
+```jsonc
+// .claude/ship-standards.json
+{
+  "platform": "wordpress",
+  "waivers": [{
+    "rule": "units/px",
+    "scope": "themes/acme/**",
+    "reason": "Client's design system is px-based; they will not fund a conversion.",
+    "approved_by": "Doug Leinen"
+  }]
+}
+```
+
+`rule` matches a whole check (`units`) or one variant (`units/px`). `scope` is an optional
+glob. **A waiver with no `reason` and `approved_by` is ignored entirely**, which is what
+keeps this from becoming a mute button.
+
+Waived findings still print, under a `Waived` heading with the approver's name, so nobody
+forgets they exist or who signed.
+
+Critically, the injection hook reads this same file and tells Claude what has been waived.
+Otherwise the checker would allow something the session would keep arguing about.
+
+**Inline.** One spot, one line:
+
+```css
+/* ship-standards:ignore units — Ghost injects this and it cannot be themed */
+.kg-card { padding: 24px; }
+```
+
+The reason is mandatory. An ignore without one is not honored, and gets reported as its
+own `should` finding.
 
 ## Install
 
@@ -117,28 +184,37 @@ change here cannot turn a client's pipeline red without warning.
 ## Test it
 
 ```bash
-# Hook injection: should print JSON containing the standards.
-echo '{"hook_event_name":"SessionStart","session_id":"t1"}' \
-  | node plugins/ship-standards/scripts/inject-standards.js full
-
 # The suite against itself: should be clean.
 node plugins/ship-standards/checks/run-checks.js --all --stage done --root .
 
-# Enforcement: should exit 2 and explain why.
+# Injection: should print the base rules plus any platform overlay.
+echo '{"hook_event_name":"SessionStart","cwd":"'"$PWD"'"}' \
+  | node plugins/ship-standards/scripts/inject-standards.js full
+
+# Enforcement: should exit 2 on a must.
 printf '.card { padding: 24px; }\n' > /tmp/gk-test.css
 echo '{"cwd":"/tmp","tool_input":{"file_path":"/tmp/gk-test.css"}}' \
   | node plugins/ship-standards/scripts/gate.js edit
 ```
 
-Then in a real session, ask for something rushed and sloppy and watch what happens. That is
-the only test that tells you whether any of this holds up in practice.
+End to end, install from a local path so you can iterate without pushing:
+
+```bash
+claude plugin marketplace add ~/code/claude-standards
+claude plugin install ship-standards@geletkaplus
+claude plugin details ship-standards     # check the token cost of the ruleset
+```
+
+Restart Claude Code, then in a scratch project ask for something rushed and sloppy and
+watch what happens. That is the only test that says whether any of this holds up.
 
 ## Escape hatches, on purpose
 
-`SHIP_STANDARDS_SKIP=1` in the environment bypasses the local gate entirely. Anyone can
-disable a local hook anyway, and a documented switch is better than someone uninstalling the
-plugin the first time it gets in their way at midnight. CI is the layer that has no such
-switch, which is why CI is the one that matters.
+`SHIP_STANDARDS_SKIP=1` in the environment bypasses the local gate entirely. It is the
+blunt instrument of last resort; waivers and inline ignores exist so nobody needs it.
+Anyone can disable a local hook anyway, and a documented switch beats someone uninstalling
+the plugin the first time it gets in their way at midnight. CI has no such switch, which
+is why CI is the one that matters.
 
 The `Stop` hook honours `stop_hook_active`, so it blocks once and then lets the session work
 through the result. Without that you can build an inescapable loop, which is worse than a
@@ -149,9 +225,10 @@ all result in exit 0 and no interference.
 
 ## Iterating
 
-1. Change `standards/ship-standards.md`, `checks/run-checks.js`, or both. Keep them agreeing
-   with each other; a rule nobody checks is decoration, and a check no rule explains is
-   infuriating.
+1. Change `standards/ship-standards.md`, `checks/run-checks.js`, or both. Keep them
+   agreeing with each other, tier included; a rule nobody checks is decoration, a check no
+   rule explains is infuriating, and a rule whose tier differs between the two is worse
+   than either.
 2. Bump `version` in `plugins/ship-standards/.claude-plugin/plugin.json` and
    `.claude-plugin/marketplace.json`.
 3. Commit, push, tag. Others pick it up with `claude plugin update ship-standards`; CI picks
@@ -165,8 +242,12 @@ objectively tell whether it was followed.
 
 - **Architecture review.** Mechanical checks cannot tell you the structure is wrong. A QA
   subagent on `Stop`, reporting rather than blocking, is the next honest step.
-- **Accessibility scanning.** The standards require WCAG 2.2 AA but nothing here verifies it.
-  Real coverage means axe-core or Lighthouse CI against a built preview, which needs the
-  project to actually build, so it belongs in the CI workflow rather than in a hook.
-- **CMS wiring verification.** Currently only partially covered, via the `env` check. Proving
-  an endpoint really returns data needs credentials CI will not always have.
+- **Accessibility scanning.** The standards require WCAG 2.2 AA but nothing here verifies
+  it. Real coverage means axe-core or Lighthouse CI against a built preview, which needs
+  the project to build, so it belongs in CI rather than in a hook.
+- **CMS wiring verification.** Only partially covered, via the `env` check. Proving an
+  endpoint really returns data needs credentials CI will not always have.
+- **Inherited projects.** A rescue repo trips every rule at once, and a first `Stop` with
+  four hundred findings gets the gate switched off within the hour. What is needed is a
+  baseline captured at intake, so only new violations block. Until that exists, start
+  those projects with `fail-on: must` in CI and waive broadly.
