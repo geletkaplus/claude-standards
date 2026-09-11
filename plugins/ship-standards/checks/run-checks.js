@@ -48,10 +48,12 @@ const SEVERITY = {
   'placeholders/tktk': MUST,
   'units/px': MUST,
   'units/tracking': CONSIDER,
+  'typography/heading-wrap': SHOULD,
   'dependencies/unpinned': SHOULD,
   'dependencies/package-manager': SHOULD,
   'dependencies/invalid': MUST,
   'env/undeclared': SHOULD,
+  'type/default-face': SHOULD,
   'meta/unreasoned-ignore': SHOULD
 };
 
@@ -351,6 +353,135 @@ function checkUnits(file, text, root, stage, findings) {
   });
 }
 
+/*
+ * Default typefaces.
+ *
+ * These faces are not bad. They are the ones that get picked when nobody picked: the
+ * median answer, reached for before the brief. So this is a should, not a must, and the
+ * way to satisfy it is a one-line reason rather than a different font. Inter genuinely is
+ * the right call for a dense data UI; saying so takes a sentence and ends the argument.
+ *
+ * Only the first face in a stack is considered. Everything after it is a fallback, and
+ * flagging `'Archivo', Helvetica, Arial` for Arial would make the check worse than useless.
+ */
+const DEFAULT_FACES = new Set([
+  'inter', 'poppins', 'montserrat', 'playfair display', 'space grotesk',
+  'dm sans', 'dm serif display', 'plus jakarta sans', 'manrope', 'outfit',
+  'sora', 'raleway', 'lato', 'nunito', 'nunito sans', 'work sans',
+  'open sans', 'roboto'
+]);
+
+function normaliseFace(raw) {
+  return String(raw)
+    .trim()
+    .replace(/^["\']|["\']$/g, '')
+    .replace(/_/g, ' ')
+    .replace(/\+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function flagFace(face, all, i, file, root, findings) {
+  const name = normaliseFace(face);
+  if (!DEFAULT_FACES.has(name)) return;
+  if (suppressed(all, i, 'type/default-face', file, root, findings)) return;
+  // Report the human name, not the raw token: "Plus Jakarta Sans", not Plus_Jakarta_Sans.
+  const pretty = name.replace(/(^|\s)([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  add(findings, 'type/default-face', file, root, i + 1,
+    pretty + ' is a default pick. Say why it fits here, or see standards/type.md.', '');
+}
+
+function checkType(file, text, root, stage, findings) {
+  const ext = path.extname(file).toLowerCase();
+  if (!STYLE_EXT.has(ext) && !CODE_EXT.has(ext) && ext !== '.html' && ext !== '.htm') return;
+  if (skipSelf(file, root)) return;
+
+  const all = lines(text);
+  all.forEach((line, i) => {
+    // Declared stacks. Only the first entry is a choice; the rest are fallbacks.
+    const decl = line.match(/font-family\s*:\s*([^;{}]+)/i) ||
+      line.match(/fontFamily\s*:\s*["\'`]([^"\'`]+)/);
+    if (decl) flagFace(String(decl[1]).split(',')[0], all, i, file, root, findings);
+
+    // Google Fonts links, which name the face before any CSS does.
+    if (/fonts\.googleapis\.com/.test(line)) {
+      const families = line.match(/family=([^&:"\'>)]+)/g) || [];
+      for (const f of families) flagFace(f.slice('family='.length), all, i, file, root, findings);
+    }
+
+    // next/font/google imports name the face as an identifier: { Plus_Jakarta_Sans }
+    if (/next\/font\/google/.test(line)) {
+      const named = line.match(/\{([^}]+)\}/);
+      if (named) {
+        for (const ident of named[1].split(',')) flagFace(ident, all, i, file, root, findings);
+      }
+    }
+  });
+}
+
+/*
+ * Headlines that never got `text-wrap: balance`.
+ *
+ * Scoped to stylesheets and to rule blocks that actually style a heading element:
+ * a selector naming a bare h1-h6, in a block that sets font-size (i.e. the block
+ * that owns the heading's type, not some unrelated spacing tweak). Anything looser
+ * guesses at which class is "a headline" and produces noise.
+ */
+function checkTypography(file, text, root, stage, findings) {
+  if (!STYLE_EXT.has(path.extname(file).toLowerCase())) return;
+  if (skipSelf(file, root)) return;
+
+  const HEADING_SEL = /(^|[\s,>+~])h[1-6](?=$|[\s,>+~:.\[{])/i;
+  const all = lines(text);
+
+  let selector = '';
+  let selectorLine = 0;
+  let depth = 0;
+  let block = '';
+  let blockStart = 0;
+
+  all.forEach((line, i) => {
+    if (/^\s*(\/\/|\/\*|\*)/.test(line)) return;
+    for (const part of line.split(/(?=[{}])|(?<=[{}])/)) {
+      if (part === '{') {
+        // Conditional at-rules wrap rules rather than being one, so they are
+        // transparent here: h1 inside @media is still a heading rule.
+        if (/^\s*@(media|supports|container|layer|scope)\b/i.test(selector)) {
+          selector = '';
+          continue;
+        }
+        depth++;
+        if (depth === 1) {
+          blockStart = selectorLine;
+          block = '';
+        }
+        continue;
+      }
+      if (part === '}') {
+        if (depth === 1 && HEADING_SEL.test(selector) && !/@/.test(selector) &&
+            /\bfont-size\s*:/.test(block) && !/\btext-wrap\s*:/.test(block)) {
+          if (!suppressed(all, blockStart, 'typography/heading-wrap', file, root, findings)) {
+            add(findings, 'typography/heading-wrap', file, root, blockStart + 1,
+              'Heading rule sets font-size but no text-wrap; use balance.',
+              selector.trim().slice(0, 120));
+          }
+        }
+        if (depth > 0) depth--;
+        selector = '';
+        continue;
+      }
+      if (depth === 0) {
+        if (!selector.trim() && part.trim()) selectorLine = i;
+        selector += ' ' + part;
+      } else {
+        block += ' ' + part;
+      }
+    }
+  });
+}
+
 /* Dependencies: pinned versions, and pnpm as the package manager. */
 function checkDeps(root, stage, findings) {
   const pkgPath = path.join(root, 'package.json');
@@ -521,6 +652,8 @@ function main() {
     if (text === null) continue;
     checkPlaceholders(file, text, root, opts.stage, findings);
     checkUnits(file, text, root, opts.stage, findings);
+    checkTypography(file, text, root, opts.stage, findings);
+    checkType(file, text, root, opts.stage, findings);
   }
 
   if (opts.all || !opts.files.length) {

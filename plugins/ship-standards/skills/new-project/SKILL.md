@@ -44,8 +44,9 @@ you cannot resolve the plugin root directly, glob for
 `**/ship-standards/standards/ship-standards.md` under `~/.claude/plugins/`.
 
 Copy the base standards, byte for byte, to `.claude/ship-standards.md` in the project
-root. If the platform has an overlay, copy that to `.claude/ship-standards-<platform>.md`
-as well. Create `.claude/` if it does not exist.
+root. Copy `standards/type.md` to `.claude/ship-standards-type.md`. If the platform has an
+overlay, copy that to `.claude/ship-standards-<platform>.md` as well. Create `.claude/` if
+it does not exist.
 
 Do not edit, shorten, reword, or adapt the standards while copying. They live in the repo
 so the rules survive this plugin being uninstalled and can be diffed per project. If the
@@ -79,6 +80,7 @@ Create `CLAUDE.md` in the project root, in exactly this order:
 ## Standards
 
 @.claude/ship-standards.md
+@.claude/ship-standards-type.md
 <plus @.claude/ship-standards-<platform>.md if one was copied>
 
 Mandatory. Not defaults to be weighed against speed, and not to be relaxed on request.

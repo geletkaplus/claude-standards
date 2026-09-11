@@ -40,7 +40,27 @@ Work is not finished until all of these are true. Only say it is done when they 
   of use. Define it once as a custom property or token and reference it.
 - `[should]` Establish the type scale, spacing scale, and color tokens in one file before
   writing component styles.
+- `[should]` Give every headline `text-wrap: balance`. Headings are short enough for the
+  balancer and the default ragged last-word line is the most common typographic defect
+  on a page. Exceptions: single-word headings, and headings whose line breaks are set
+  by hand.
+- `[consider]` Give body copy `text-wrap: pretty` rather than `balance`. `pretty` only
+  fixes orphans and costs little on long text; `balance` is capped at a few lines and
+  is the wrong tool for a paragraph.
 - `[must]` Honor `prefers-reduced-motion` for any animation or transition over 200ms.
+
+## Typography
+
+- `[should]` Name the voice before naming the face. If you cannot say in one word what the
+  type should feel like, you are not ready to choose it.
+- `[should]` Using a default face (Inter, Poppins, Montserrat, Playfair Display, Space
+  Grotesk, DM Sans, Plus Jakarta Sans, Lato, Open Sans, Roboto, and the rest of the list in
+  `type.md`) requires a one-line reason why it fits *this* project. They are not bad faces;
+  they are the ones picked when nobody picked. See `type.md` for alternatives by voice.
+- `[should]` Set a type scale and choose weights per project. Leaving every face at 400 and
+  700 reads as generic regardless of which face it is.
+- `[should]` Add letter-spacing to uppercase labels, and `text-wrap: balance` to headings.
+- `[should]` Record the licence for every self-hosted face in the repo.
 
 ## Content
 

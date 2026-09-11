@@ -16,6 +16,7 @@ claude-standards/
     ├── .claude-plugin/plugin.json
     ├── standards/
     │   ├── ship-standards.md             the rules themselves (single source of truth)
+    │   ├── type.md                       typeface reference, consulted not injected
     │   └── platforms/*.md                per-stack overlays, layered on the base
     ├── checks/run-checks.js              every mechanical check, one implementation
     ├── hooks/hooks.json                  wires the hooks to four events
@@ -76,12 +77,21 @@ named rather than quietly dropped, then lets the session proceed.
 | `placeholders/tktk` | must | unresolved `[TKTK: ...]` markers (at `done` stage only) |
 | `units/px` | must | `px` outside hairlines, outlines, shadows, and media queries |
 | `units/tracking` | consider | `px` or `rem` on `letter-spacing` / `word-spacing`, which want `em` |
+| `typography/heading-wrap` | should | A rule that sizes an `h1`-`h6` but never sets `text-wrap` |
 | `dependencies/unpinned` | should | `^`, `~`, `latest`, wildcards and open ranges |
 | `dependencies/package-manager` | should | a stray `package-lock.json` or `yarn.lock`, or a non-pnpm `packageManager` |
 | `env/undeclared` | should | `process.env.X` missing from `.env.example` |
+| `type/default-face` | should | Inter, Poppins, Montserrat, Playfair Display and the rest of the default list |
 
 `units/px` is a must because fixed pixel sizing ignores the reader's font-size setting,
 which makes it an accessibility problem rather than a matter of taste.
+
+`type/default-face` reads the first face in a stack only, since everything after it is a
+fallback, and covers `font-family`, Google Fonts links, and `next/font/google` imports. It
+is a `should` because those faces are not bad, they are just what gets chosen when nobody
+chose. Satisfy it with a one-line reason, not a different font:
+`/* ship-standards:ignore type Inter for the dashboard; built for dense UI */`.
+Alternatives grouped by voice live in `standards/type.md`.
 
 `env` skips platform and runtime variables (`PORT`, `CI`, `VERCEL_*`, `GITHUB_*`, `npm_*`),
 because nobody declares those. `units` exempts a single declaration rather than a whole

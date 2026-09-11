@@ -165,6 +165,13 @@ function buildStandards(root) {
     }
   }
 
+  // The type shortlist is a reference to consult, not a rule to obey, so it is named
+  // rather than inlined. Injecting the whole table would cost tokens on every turn for
+  // something that gets read once per project.
+  parts.push('## Choosing type\n\nWhen picking typefaces, read ' +
+    path.join(STANDARDS_DIR, 'type.md') + ' first. It lists the default faces to justify ' +
+    'or avoid, and alternatives grouped by voice.');
+
   const waivers = waiverText(config.waivers);
   if (waivers) parts.push(waivers);
 
