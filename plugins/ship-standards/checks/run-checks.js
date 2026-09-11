@@ -49,6 +49,7 @@ const SEVERITY = {
   'units/px': MUST,
   'units/tracking': CONSIDER,
   'typography/heading-wrap': SHOULD,
+  'tailwind/arbitrary-value': MUST,
   'dependencies/unpinned': SHOULD,
   'dependencies/package-manager': SHOULD,
   'dependencies/invalid': MUST,
@@ -324,8 +325,14 @@ function checkUnits(file, text, root, stage, findings) {
     if (/^\s*(\/\/|\/\*|\*)/.test(line)) return;
     if (isCode && !/(style|css|styled|class|tw`|sx\s*=|\.scss|\.css)/i.test(line)) return;
 
+    // A Tailwind arbitrary value like p-[13px] is already reported, in full, by
+    // checkTailwind. Reporting the px inside it again is the same defect twice.
+    const subject = /\b(?:class|className|classList|class:list)\s*=/.test(line)
+      ? line.replace(/\[[^\]]*\]/g, '')
+      : line;
+
     const offenders = [];
-    for (const segment of line.split(/[;{}]/)) {
+    for (const segment of subject.split(/[;{}]/)) {
       if (TRACKING_PROP.test(segment)) {
         const tracking = segment.match(/(?<![\w.-])(\d*\.?\d+)(px|rem)\b/g) || [];
         for (const m of tracking) {
@@ -419,6 +426,51 @@ function checkType(file, text, root, stage, findings) {
       }
     }
   });
+}
+
+/*
+ * Tailwind bracket syntax: a hardcoded value wearing a class name.
+ *
+ * Read out of class attributes only (className, class, :class, classList, cva/clsx
+ * argument strings are all just strings, so the attribute is the reliable anchor),
+ * because brackets are ordinary syntax everywhere else in a JS or template file.
+ *
+ * Two shapes are deliberately allowed: arbitrary *properties* (`[mask-type:luminance]`,
+ * which have no utility to reach for) and arbitrary *variants* (`[&>li]:mt-2`,
+ * `supports-[display:grid]:`), which select rather than set a value.
+ */
+function checkTailwind(file, text, root, stage, findings) {
+  const ext = path.extname(file).toLowerCase();
+  if (!CODE_EXT.has(ext) && !CONTENT_EXT.has(ext)) return;
+  if (skipSelf(file, root)) return;
+  if (text.indexOf('[') === -1) return;
+
+  const ATTR = /\b(?:class|className|classList|class:list)\s*=\s*(?:\{?\s*)?(["'`])([\s\S]*?)\1/g;
+  const all = lines(text);
+
+  let m;
+  while ((m = ATTR.exec(text)) !== null) {
+    const value = m[2];
+    const line = text.slice(0, m.index).split(/\r?\n/).length - 1;
+    const offenders = [];
+
+    for (const token of value.split(/\s+/)) {
+      if (!token || token.indexOf('[') === -1) continue;
+      // Variants are everything before the last colon that is not inside brackets.
+      const utility = token.replace(/^(?:[^:\[\]]+:|\[[^\]]*\]:|[a-z-]+-\[[^\]]*\]:)+/i, '');
+      const bracket = utility.match(/\[([^\]]*)\]/);
+      if (!bracket) continue;
+      if (/^--/.test(bracket[1])) continue;      // [--my-var:1rem], an arbitrary property
+      if (/^[a-z-]+:/i.test(bracket[1])) continue; // [mask-type:luminance], likewise
+      offenders.push(token);
+    }
+
+    if (!offenders.length) continue;
+    if (suppressed(all, line, 'tailwind/arbitrary-value', file, root, findings)) continue;
+    add(findings, 'tailwind/arbitrary-value', file, root, line + 1,
+      'Tailwind bracket value (' + offenders.join(', ') + '). Put it on the theme scale.',
+      offenders.join(' ').slice(0, 120));
+  }
 }
 
 /*
@@ -653,6 +705,7 @@ function main() {
     checkPlaceholders(file, text, root, opts.stage, findings);
     checkUnits(file, text, root, opts.stage, findings);
     checkTypography(file, text, root, opts.stage, findings);
+    checkTailwind(file, text, root, opts.stage, findings);
     checkType(file, text, root, opts.stage, findings);
   }
 

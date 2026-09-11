@@ -78,6 +78,7 @@ named rather than quietly dropped, then lets the session proceed.
 | `units/px` | must | `px` outside hairlines, outlines, shadows, and media queries |
 | `units/tracking` | consider | `px` or `rem` on `letter-spacing` / `word-spacing`, which want `em` |
 | `typography/heading-wrap` | should | A rule that sizes an `h1`-`h6` but never sets `text-wrap` |
+| `tailwind/arbitrary-value` | must | bracket syntax in a class attribute (`p-[13px]`), which is a hardcoded value |
 | `dependencies/unpinned` | should | `^`, `~`, `latest`, wildcards and open ranges |
 | `dependencies/package-manager` | should | a stray `package-lock.json` or `yarn.lock`, or a non-pnpm `packageManager` |
 | `env/undeclared` | should | `process.env.X` missing from `.env.example` |

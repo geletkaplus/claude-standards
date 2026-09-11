@@ -40,6 +40,15 @@ Work is not finished until all of these are true. Only say it is done when they 
   of use. Define it once as a custom property or token and reference it.
 - `[should]` Establish the type scale, spacing scale, and color tokens in one file before
   writing component styles.
+- `[should]` Use Tailwind where the project is component-driven and already has it, or is
+  a greenfield React or Next build. Use plain CSS with custom properties for content-driven
+  stacks (Astro, Ghost, WordPress, static HTML), where there is no component to colocate
+  into. Whichever it is, do not mix the two in one repo.
+- `[must]` No Tailwind bracket syntax. `p-[13px]`, `text-[#1a1a1a]`, `w-[47rem]` are
+  hardcoded values wearing a class name. If the value is not on the scale, add it to the
+  theme; do not inline it.
+- `[should]` In a Tailwind project the theme block is the token file the rule above asks
+  for. Define the scale there and nowhere else.
 - `[should]` Give every headline `text-wrap: balance`. Headings are short enough for the
   balancer and the default ragged last-word line is the most common typographic defect
   on a page. Exceptions: single-word headings, and headings whose line breaks are set
