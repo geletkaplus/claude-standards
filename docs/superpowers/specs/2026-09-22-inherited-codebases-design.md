@@ -1,17 +1,46 @@
-# Inherited codebases: touched-file scoping for ship-standards
+# Inherited codebases: activation and touched-file scoping for ship-standards
 
 **Date:** 2026-09-22
 **Status:** Approved design, awaiting implementation plan
 
 ## Problem
 
-The `done` gate scans the whole repo and the `edit` gate scans the whole file just
-written. On an inherited codebase the full-repo scan surfaces hundreds of pre-existing
-violations the current work never created, which either blocks all progress or trains
-people to switch the gate off. The goal: stay out of the way of legacy debt without
-ignoring the standards on work actually being done.
+Two forms of the same flaw: the plugin assumes every directory is a Geletkaplus
+production site.
 
-## Decision
+1. The `done` gate scans the whole repo and the `edit` gate scans the whole file
+   just written. On an inherited codebase the full-repo scan surfaces hundreds of
+   pre-existing violations the current work never created, which either blocks all
+   progress or trains people to switch the gate off.
+2. The gates fire unconditionally in every repo where the plugin is enabled, so
+   anyone with the plugin installed hits blocking enforcement on personal
+   experiments and repos that never opted in.
+
+The goal: stay out of the way where the standards were never adopted, and out of
+the way of legacy debt where they were, without ignoring them on work actually
+being done.
+
+## Decision 1: enforcement is opt-in per repo
+
+The blocking gates are active only where `.claude/ship-standards.json` exists.
+
+- **With the config file** (any content, even `{}`): current behavior. The `edit`
+  and `done` gates block on must-level findings; `done` surfaces should-level ones.
+- **Without it:** the standards are still injected as guidance (SessionStart,
+  UserPromptSubmit, unchanged), but `gate.js` exits 0 immediately in both modes.
+  Claude is asked to follow the standards; nothing mechanically blocks.
+- `/new-project` already writes the config file, so new builds are enforced from
+  the start. A new `/adopt-project` skill opts an existing repo in: it writes the
+  config, asks whether the codebase is inherited (setting `scope: "touched"`), and
+  runs a first full report so the debt is visible on day one.
+- CI is unaffected by this switch: a repo wires up `client-workflow.yml`
+  deliberately, which is already an opt-in.
+
+Injection stays on everywhere on purpose: the standards should still shape
+unconfigured client work; only the *blocking* requires a human to have opted the
+repo in, mirroring how waivers require a name.
+
+## Decision 2: boy-scout scoping for inherited repos
 
 Boy-scout rule, at file granularity. A file you touch comes fully up to standard.
 A file you do not touch is left alone. Because the unit is the whole file, no
@@ -74,8 +103,10 @@ list, not scanned.
 
 ### `scripts/gate.js`
 
-- `edit` mode: unchanged. It already checks exactly the file just written, which is
-  the boy-scout rule.
+- Both modes exit 0 immediately when `.claude/ship-standards.json` does not exist
+  (Decision 1).
+- `edit` mode: otherwise unchanged. It already checks exactly the file just
+  written, which is the boy-scout rule.
 - `done` mode: reads `scope` from `.claude/ship-standards.json` (via the same
   config read the checker uses) and passes `--touched` when it is `"touched"`.
 - Adds the discovery hint described above when scope is `"repo"`.
@@ -98,6 +129,13 @@ New subsection under **Exceptions**, "Inherited codebases":
   (`"rule": "units", "scope": "legacy/**"`) or an inline
   `ship-standards:ignore`. Do not switch the gate off; put a name on the exemption.
 
+### `skills/adopt-project/SKILL.md` (new)
+
+Opts an existing repo in: confirms the platform (reusing the checker's detection),
+asks whether the codebase is inherited, writes `.claude/ship-standards.json`
+(with `scope: "touched"` when inherited), runs `run-checks.js --all --json` once,
+and reports the existing debt so adoption starts with eyes open.
+
 ### `scripts/inject-standards.js`
 
 - When the project config says `scope: "touched"`, the injected context states it in
@@ -115,7 +153,13 @@ New subsection under **Exceptions**, "Inherited codebases":
 
 ## Testing
 
-Fixture repo (created in a temp dir by the test script, with real git history):
+Activation (Decision 1):
+
+1. No config file: `gate.js edit` and `gate.js done` exit 0 on a repo full of
+   violations; injection still emits the standards.
+2. Config file present (even `{}`): gates block as today.
+
+Scoping (Decision 2), on a fixture repo (created in a temp dir by the test script, with real git history):
 a committed "legacy" file full of violations, plus a dirty file with violations.
 
 1. `scope: touched`: dirty file's musts block; legacy file's do not.
