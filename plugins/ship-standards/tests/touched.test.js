@@ -88,6 +88,28 @@ test('deps check runs when package.json is touched', () => {
   assert.ok(json.findings.some((f) => f.rule === 'dependencies/unpinned'));
 });
 
+test('touched scope: file inside a new untracked directory is seen', () => {
+  const root = makeRepo({ 'clean.css': CLEAN_CSS });
+  writeFiles(root, { 'sub/new.css': 'p { margin: 13px; }\n' }); // untracked dir
+  const { code, json } = runChecks(['--all', '--touched', '--root', root], root);
+  assert.strictEqual(code, 1);
+  const files = json.findings.map((f) => f.file);
+  assert.ok(files.includes(path.join('sub', 'new.css')));
+});
+
+test('touched scope: dirty file under a skipped dir is not scanned', () => {
+  const root = makeRepo({ 'clean.css': CLEAN_CSS });
+  writeFiles(root, {
+    'dist/bundle.css': 'p { margin: 13px; }\n',
+    'new.css': 'p { margin: 13px; }\n'
+  });
+  const { json } = runChecks(['--all', '--touched', '--root', root], root);
+  assert.strictEqual(json.scope, 'touched');
+  const files = json.findings.map((f) => f.file);
+  assert.ok(!files.includes(path.join('dist', 'bundle.css')));
+  assert.ok(files.includes('new.css'));
+});
+
 test('env check only reports vars referenced from touched files', () => {
   const root = makeRepo({
     'legacy.js': 'export default { css: process.env.OLD_KEY };\n',

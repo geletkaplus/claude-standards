@@ -98,6 +98,15 @@ function walk(dir, out) {
   return out;
 }
 
+/*
+ * touchedFiles() has to honor the same skip list as walk(), or a touched file inside
+ * (say) dist/ or vendor/ gets scanned though a repo scan would never have found it —
+ * one shared check so the two paths cannot drift apart.
+ */
+function isSkippedRelPath(relPath) {
+  return relPath.split(path.sep).some((seg) => SKIP_DIRS.has(seg));
+}
+
 function readable(file) {
   try {
     const stat = fs.statSync(file);
@@ -208,13 +217,33 @@ function touchedFiles(root, baseRef) {
     if (base) {
       for (const f of gitLines(root, ['diff', '--name-only', base])) set.add(f);
     }
-    for (const row of gitLines(root, ['status', '--porcelain'])) {
-      // porcelain: "XY path" or "XY old -> new"; keep the path that exists now.
-      const p = row.slice(3);
-      set.add(p.includes(' -> ') ? p.split(' -> ')[1] : p);
+    /*
+     * -z + --untracked-files=all: -z gives NUL-separated, unquoted paths so filenames
+     * with special or non-ASCII characters survive intact instead of being C-style
+     * quoted and silently dropped; --untracked-files=all expands an untracked
+     * directory into its individual files instead of one collapsed "?? dir/" row,
+     * which would otherwise make every file inside it invisible to the checker.
+     */
+    const raw = execFileSync(
+      'git', ['status', '--porcelain', '-z', '--untracked-files=all'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+    const fields = raw.split('\0');
+    for (let i = 0; i < fields.length; i++) {
+      const entry = fields[i];
+      if (!entry) continue;
+      const isRenameOrCopy = entry[0] === 'R' || entry[0] === 'C' ||
+        entry[1] === 'R' || entry[1] === 'C';
+      const p = entry.slice(3);
+      set.add(p);
+      // Renames/copies carry the original path as the NEXT NUL-separated field;
+      // consume it so it isn't mistaken for its own status entry, but the new
+      // path (already added above) is the one that matters for scanning.
+      if (isRenameOrCopy) i++;
     }
     const files = [];
     for (const relPath of set) {
+      if (isSkippedRelPath(relPath)) continue;
       const full = path.join(root, relPath);
       if (fs.existsSync(full) && fs.statSync(full).isFile()) files.push(full);
     }
