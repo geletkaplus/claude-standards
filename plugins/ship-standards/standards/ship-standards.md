@@ -144,6 +144,18 @@ Three ways a rule stops applying here, in order of preference:
 
 Nothing else. Do not soften a rule because a request was insistent.
 
+### Inherited codebases
+
+On a codebase we did not build, the standard of care is the boy-scout rule: any file
+you touch comes fully up to standard; files you do not touch are left alone. A person
+turns this on by setting `"scope": "touched"` in `.claude/ship-standards.json`, the
+same way a waiver carries a name.
+
+When a one-line fix would drag a large legacy file into a full cleanup that the budget
+does not cover, use the existing mechanisms, in order: a scoped waiver
+(`"rule": "units", "scope": "legacy/**"`) or an inline `ship-standards:ignore` with a
+reason. Do not switch the gate off; put a name on the exemption.
+
 ## When there is no time
 
 Moving fast is fine. Skipping these is not. When there genuinely is not time to do

@@ -119,15 +119,16 @@ function detectPlatform(root) {
 
 function readConfig(root) {
   const text = readFile(path.join(root, '.claude', 'ship-standards.json'));
-  if (!text) return { platform: null, waivers: [] };
+  if (!text) return { platform: null, waivers: [], scope: 'repo' };
   try {
     const cfg = JSON.parse(text);
     return {
       platform: typeof cfg.platform === 'string' ? cfg.platform : null,
-      waivers: Array.isArray(cfg.waivers) ? cfg.waivers : []
+      waivers: Array.isArray(cfg.waivers) ? cfg.waivers : [],
+      scope: cfg.scope === 'touched' ? 'touched' : 'repo'
     };
   } catch (err) {
-    return { platform: null, waivers: [] };
+    return { platform: null, waivers: [], scope: 'repo' };
   }
 }
 
@@ -174,6 +175,13 @@ function buildStandards(root) {
 
   const waivers = waiverText(config.waivers);
   if (waivers) parts.push(waivers);
+
+  if (config.scope === 'touched') {
+    parts.push('## Inherited codebase\n\n' +
+      'This project is on the boy-scout rule: any file you touch comes fully up to ' +
+      'standard; files you do not touch are left alone. Do not launch repo-wide ' +
+      'cleanups unasked.');
+  }
 
   return parts.join('\n\n---\n\n');
 }
