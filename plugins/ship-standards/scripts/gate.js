@@ -90,18 +90,43 @@ function main() {
   const input = readInput();
   const cwd = input.cwd || process.cwd();
 
+  // Enforcement is opt-in per repo: the config file is the switch, the same way a
+  // waiver needs a name. Without it the standards are guidance, not a gate.
+  const configPath = path.join(cwd, '.claude', 'ship-standards.json');
+  if (!fs.existsSync(configPath)) process.exit(0);
+
+  let scope = 'repo';
+  try {
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (cfg && cfg.scope === 'touched') scope = 'touched';
+  } catch (err) { /* invalid config already reported by the checker; treat as repo */ }
+
   if (MODE === 'done') {
     // Already blocked once this turn; let Claude finish acting on that.
     if (input.stop_hook_active) process.exit(0);
 
-    const result = runChecks(['--all', '--stage', 'done', '--root', cwd, '--json'], cwd);
+    const args = ['--all', '--stage', 'done', '--root', cwd, '--json'];
+    if (scope === 'touched') args.push('--touched');
+    const result = runChecks(args, cwd);
     if (!result) process.exit(0);
 
     const must = result.findings.filter((f) => f.severity === 'must');
     if (must.length) {
+      let hint = '';
+      if (scope !== 'touched' && result.scope === 'repo') {
+        // If every offender is a committed, unmodified file, the debt predates this
+        // work; name the fix instead of only dumping the list.
+        const touchedResult = runChecks(
+          ['--all', '--stage', 'done', '--root', cwd, '--touched', '--json'], cwd);
+        if (touchedResult && touchedResult.scope === 'touched' &&
+            !touchedResult.findings.some((f) => f.severity === 'must')) {
+          hint = '\nAll of these predate the current work. If this is an inherited ' +
+            'codebase, set "scope": "touched" in .claude/ship-standards.json.\n';
+        }
+      }
       block(
         'Not done. These must be fixed:\n\n' + list(must) +
-        '\n\nFix them, then finish. Do not call this complete while any remain.\n'
+        '\n\nFix them, then finish. Do not call this complete while any remain.\n' + hint
       );
     }
 
@@ -118,7 +143,7 @@ function main() {
     process.exit(0);
   }
 
-  // PostToolUse
+  // PostToolUse (edit mode)
   const toolInput = input.tool_input || {};
   const file = toolInput.file_path || toolInput.path || toolInput.notebook_path;
   if (!file) process.exit(0);
