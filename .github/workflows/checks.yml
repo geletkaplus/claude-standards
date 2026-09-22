@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Check out the project
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check out the standards
         uses: actions/checkout@v4
@@ -65,9 +67,13 @@ jobs:
         id: checks
         run: |
           set +e
+          BASE_ARGS=""
+          if [ -n "${{ github.base_ref }}" ]; then
+            BASE_ARGS="--touched-base origin/${{ github.base_ref }}"
+          fi
           node .ship-standards/plugins/ship-standards/checks/run-checks.js \
             --all --stage "${{ inputs.stage }}" --fail-on "${{ inputs.fail-on }}" \
-            --root "$GITHUB_WORKSPACE" \
+            --root "$GITHUB_WORKSPACE" $BASE_ARGS \
             > check-output.txt 2>&1
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
           cat check-output.txt
