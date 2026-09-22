@@ -71,3 +71,31 @@ test('deleted touched file is dropped, not scanned', () => {
   const { code } = runChecks(['--all', '--touched', '--root', root], root);
   assert.strictEqual(code, 0);
 });
+
+const BAD_PKG = JSON.stringify({ dependencies: { react: '^18.0.0' } }, null, 2);
+
+test('deps check skipped when package.json untouched', () => {
+  const root = makeRepo({ 'package.json': BAD_PKG, 'a.css': CLEAN_CSS });
+  writeFiles(root, { 'new.css': CLEAN_CSS });
+  const { json } = runChecks(['--all', '--touched', '--root', root], root);
+  assert.ok(!json.findings.some((f) => f.check === 'dependencies'));
+});
+
+test('deps check runs when package.json is touched', () => {
+  const root = makeRepo({ 'a.css': CLEAN_CSS });
+  writeFiles(root, { 'package.json': BAD_PKG });
+  const { json } = runChecks(['--all', '--touched', '--root', root], root);
+  assert.ok(json.findings.some((f) => f.rule === 'dependencies/unpinned'));
+});
+
+test('env check only reports vars referenced from touched files', () => {
+  const root = makeRepo({
+    'legacy.js': 'export default { css: process.env.OLD_KEY };\n',
+    '.env.example': ''
+  });
+  writeFiles(root, { 'new.js': 'export default { css: process.env.NEW_KEY };\n' });
+  const { json } = runChecks(['--all', '--touched', '--root', root], root);
+  const env = json.findings.filter((f) => f.rule === 'env/undeclared');
+  assert.ok(env.some((f) => f.message.startsWith('NEW_KEY')));
+  assert.ok(!env.some((f) => f.message.startsWith('OLD_KEY')));
+});

@@ -779,7 +779,12 @@ function main() {
   }
 
   if (opts.all || !opts.files.length) {
-    checkDeps(root, opts.stage, findings);
+    // On a touched scan, dependency rules only apply if someone touched the
+    // dependency files; legacy lockfile sins belong to the legacy.
+    const depFiles = ['package.json', 'package-lock.json', 'yarn.lock'];
+    const depsTouched = scope !== 'touched' ||
+      files.some((f) => depFiles.includes(rel(f, root)));
+    if (depsTouched) checkDeps(root, opts.stage, findings);
     checkEnv(files, root, opts.stage, findings);
   }
 
