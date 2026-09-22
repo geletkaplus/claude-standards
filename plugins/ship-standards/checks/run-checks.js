@@ -30,6 +30,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 /* ------------------------------------------------------------------ config */
 
@@ -153,15 +154,73 @@ function skipSelf(file, root) {
  */
 function readConfig(root) {
   const text = readable(path.join(root, '.claude', 'ship-standards.json'));
-  if (!text) return { platform: null, waivers: [] };
+  if (!text) return { platform: null, waivers: [], scope: 'repo' };
   try {
     const cfg = JSON.parse(text);
     return {
       platform: typeof cfg.platform === 'string' ? cfg.platform : null,
-      waivers: Array.isArray(cfg.waivers) ? cfg.waivers : []
+      waivers: Array.isArray(cfg.waivers) ? cfg.waivers : [],
+      scope: cfg.scope === 'touched' ? 'touched' : 'repo'
     };
   } catch (err) {
-    return { platform: null, waivers: [], invalid: true };
+    return { platform: null, waivers: [], invalid: true, scope: 'repo' };
+  }
+}
+
+/* ------------------------------------------------------------- touched files */
+
+function gitLines(root, args) {
+  return execFileSync('git', args, {
+    cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
+  }).split('\n').map((l) => l.trim()).filter(Boolean);
+}
+
+/*
+ * The boy-scout unit is the file: everything changed since the merge-base with the
+ * default branch, plus anything dirty or untracked right now. Any git failure returns
+ * null and the caller runs a full scan instead — a git error must never read as
+ * "nothing was touched", which would silently disable every check.
+ */
+function touchedFiles(root, baseRef) {
+  try {
+    const set = new Set();
+    let base = baseRef || null;
+    if (!base) {
+      let def = null;
+      try {
+        def = gitLines(root, ['symbolic-ref', 'refs/remotes/origin/HEAD'])[0] || null;
+      } catch (err) { /* no origin/HEAD; try local names */ }
+      if (!def) {
+        for (const name of ['main', 'master']) {
+          try {
+            gitLines(root, ['rev-parse', '--verify', '--quiet', name]);
+            def = name;
+            break;
+          } catch (err) { /* not this one */ }
+        }
+      }
+      if (def) {
+        try {
+          base = gitLines(root, ['merge-base', def, 'HEAD'])[0] || null;
+        } catch (err) { /* unrelated histories; dirty files still count */ }
+      }
+    }
+    if (base) {
+      for (const f of gitLines(root, ['diff', '--name-only', base])) set.add(f);
+    }
+    for (const row of gitLines(root, ['status', '--porcelain'])) {
+      // porcelain: "XY path" or "XY old -> new"; keep the path that exists now.
+      const p = row.slice(3);
+      set.add(p.includes(' -> ') ? p.split(' -> ')[1] : p);
+    }
+    const files = [];
+    for (const relPath of set) {
+      const full = path.join(root, relPath);
+      if (fs.existsSync(full) && fs.statSync(full).isFile()) files.push(full);
+    }
+    return { files };
+  } catch (err) {
+    return null;
   }
 }
 
@@ -654,7 +713,7 @@ function checkEnv(files, root, stage, findings) {
 function parseArgs(argv) {
   const opts = {
     all: false, files: [], stage: 'done', json: false,
-    root: process.cwd(), failOn: MUST
+    root: process.cwd(), failOn: MUST, touched: false, touchedBase: null
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -667,7 +726,8 @@ function parseArgs(argv) {
       opts.failOn = RANK[v] ? v : MUST;
     } else if (a === '--files') {
       while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) opts.files.push(argv[++i]);
-    }
+    } else if (a === '--touched') opts.touched = true;
+    else if (a === '--touched-base') opts.touchedBase = argv[++i];
   }
   return opts;
 }
@@ -690,13 +750,22 @@ function main() {
   SELF_REPO = detectSelfRepo(root);
   const config = readConfig(root);
 
+  let scope = 'repo';
   let files;
   if (opts.files.length) {
     files = opts.files
       .map((f) => (path.isAbsolute(f) ? f : path.join(root, f)))
       .filter((f) => fs.existsSync(f));
   } else {
-    files = walk(root, []);
+    const wantTouched = opts.touched || config.scope === 'touched';
+    let touched = null;
+    if (wantTouched) touched = touchedFiles(root, opts.touchedBase);
+    if (touched) {
+      scope = 'touched';
+      files = touched.files;
+    } else {
+      files = walk(root, []);
+    }
   }
 
   for (const file of files) {
@@ -742,6 +811,8 @@ function main() {
     process.stdout.write(JSON.stringify({
       stage: opts.stage,
       platform: config.platform,
+      scope: scope,
+      filesChecked: files.length,
       failOn: opts.failOn,
       counts: {
         must: live.filter((f) => f.severity === MUST).length,
@@ -773,7 +844,8 @@ function main() {
 
   if (!live.length) {
     out.push('Geletkaplus standards: clean (' + files.length + ' files checked' +
-      (config.platform ? ', platform ' + config.platform : '') + ').');
+      (config.platform ? ', platform ' + config.platform : '') +
+      (scope === 'touched' ? ', touched files only' : '') + ').');
   }
 
   process.stdout.write(out.join('\n').replace(/\n+$/, '') + '\n');
