@@ -14,3 +14,4 @@
   you did not write.
 - Prefix every global function, class, and option with the project's namespace.
 - Keep template logic thin. Query and transform above, markup below.
+- Always use Gutenberg blocks for content management. Strongly recommend ACF integration. Never hardcode HTML sections that should be user editable.

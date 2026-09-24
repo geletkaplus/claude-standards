@@ -12,6 +12,7 @@ that violates them can reach a production branch quietly.
 claude-standards/
 ├── .claude-plugin/marketplace.json       makes this repo installable as a plugin source
 ├── .github/workflows/checks.yml          reusable CI workflow, called by client repos
+├── .github/workflows/ci.yml              verifies this repo: tests, self-check, versions
 └── plugins/ship-standards/
     ├── .claude-plugin/plugin.json
     ├── standards/
@@ -23,6 +24,8 @@ claude-standards/
     ├── scripts/inject-standards.js       puts the rules into context automatically
     ├── scripts/gate.js                   blocks edits and completion that violate them
     ├── skills/new-project/SKILL.md       the /new-project generator command
+    ├── skills/adopt-project/SKILL.md     the /adopt-project command for existing repos
+    ├── tests/*.test.js                   unit tests for the gate and touched-file logic
     └── templates/
         ├── project-settings.json         drop-in Claude Code config for client repos
         └── client-workflow.yml           drop-in CI workflow for client repos
@@ -81,8 +84,10 @@ named rather than quietly dropped, then lets the session proceed.
 | `tailwind/arbitrary-value` | must | bracket syntax in a class attribute (`p-[13px]`), which is a hardcoded value |
 | `dependencies/unpinned` | should | `^`, `~`, `latest`, wildcards and open ranges |
 | `dependencies/package-manager` | should | a stray `package-lock.json` or `yarn.lock`, or a non-pnpm `packageManager` |
+| `dependencies/invalid` | must | a `package.json` that does not parse |
 | `env/undeclared` | should | `process.env.X` missing from `.env.example` |
 | `type/default-face` | should | Inter, Poppins, Montserrat, Playfair Display and the rest of the default list |
+| `meta/unreasoned-ignore` | should | a `ship-standards:ignore` with no reason after it |
 
 `units/px` is a must because fixed pixel sizing ignores the reader's font-size setting,
 which makes it an accessibility problem rather than a matter of taste.
@@ -195,6 +200,9 @@ change here cannot turn a client's pipeline red without warning.
 ## Test it
 
 ```bash
+# Unit tests. Pass the files, not the directory; there is no package.json here.
+node --test plugins/ship-standards/tests/*.test.js
+
 # The suite against itself: should be clean.
 node plugins/ship-standards/checks/run-checks.js --all --stage done --root .
 
@@ -242,8 +250,10 @@ all result in exit 0 and no interference.
    than either.
 2. Bump `version` in `plugins/ship-standards/.claude-plugin/plugin.json` and
    `.claude-plugin/marketplace.json`.
-3. Commit, push, tag. Others pick it up with `claude plugin update ship-standards`; CI picks
-   it up on the next run, or at the next tag bump if pinned.
+3. Commit and push. `ci.yml` runs the tests, the self-check, and confirms the two version
+   fields agree. When it is green, tag the release (`git tag v0.5.0 && git push --tags`).
+   Others pick it up with `claude plugin update ship-standards`; client CI picks it up on
+   the next run, or when they move their pin to the new tag.
 
 Keep the prose rules short. Every line is injected into context repeatedly, so vague advice
 costs tokens on every turn and changes nothing. A rule earns its place if a person could
@@ -258,7 +268,8 @@ objectively tell whether it was followed.
   the project to build, so it belongs in CI rather than in a hook.
 - **CMS wiring verification.** Only partially covered, via the `env` check. Proving an
   endpoint really returns data needs credentials CI will not always have.
-- **Inherited projects.** A rescue repo trips every rule at once, and a first `Stop` with
-  four hundred findings gets the gate switched off within the hour. What is needed is a
-  baseline captured at intake, so only new violations block. Until that exists, start
-  those projects with `fail-on: must` in CI and waive broadly.
+- **Checks for the remaining musts.** `prefers-reduced-motion`, hardcoded colors, and the
+  static half of accessibility (`img` without `alt`, inputs without labels, `outline: none`
+  with no replacement, a `div` with a click handler) have rules but no check behind them.
+- **Overlay enforcement.** Platform overlays are prose only. On WordPress, unescaped output
+  is called a must and nothing looks for it.

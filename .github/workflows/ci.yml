@@ -1,0 +1,35 @@
+name: CI
+
+# Verifies this repo itself. checks.yml is the reusable workflow client repos call;
+# this one makes sure a change to the checker or the gate cannot reach them broken.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    name: Tests and self-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run the unit tests
+        run: node --test plugins/ship-standards/tests/*.test.js
+
+      - name: Run the suite against this repo
+        run: node plugins/ship-standards/checks/run-checks.js --all --stage done --fail-on should --root .
+
+      - name: Check the plugin and marketplace versions agree
+        run: |
+          a=$(node -p "require('./plugins/ship-standards/.claude-plugin/plugin.json').version")
+          b=$(node -p "require('./.claude-plugin/marketplace.json').plugins[0].version")
+          if [ "$a" != "$b" ]; then
+            echo "plugin.json is $a but marketplace.json is $b"
+            exit 1
+          fi
