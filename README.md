@@ -6,6 +6,75 @@ The point of this repo: whoever is driving a build, and however fast they are mo
 the production rules are already in the session before they type anything, and nothing
 that violates them can reach a production branch quietly.
 
+## Install
+
+On each machine, two commands:
+
+```bash
+claude plugin marketplace add geletkaplus/claude-standards
+claude plugin install ship-standards@geletkaplus
+```
+
+Restart Claude Code. The rules are now in every session, but the gates stay off in a
+project until it has a `.claude/ship-standards.json`. Turning that on is one command
+per repo, depending on where the code came from.
+
+### A new project
+
+```
+/new-project <client or project name, and a sentence about what it needs>
+```
+
+Confirms the stack, writes a compliant `CLAUDE.md` and the project config, and reports
+every assumption it made. Enforcement applies to the whole repo from the first commit.
+
+### An existing project
+
+```
+/adopt-project <optionally, anything known about the project's history>
+```
+
+Detects the platform, asks one question (did we build this?), writes the project config,
+and prints the existing debt by severity so adoption starts with eyes open.
+
+For a codebase someone else built, the answer is inherited, and the standard of care is
+the boy-scout rule: any file you touch comes fully up to standard; files you do not
+touch are left alone. The config carries it as `"scope": "touched"`:
+
+```json
+{ "platform": "wordpress", "scope": "touched", "waivers": [] }
+```
+
+The `Stop` gate then checks only files changed since the base branch. Pre-existing
+violations in untouched files are accepted debt, not a blocker. When a one-line fix would
+drag a large legacy file into a full cleanup, use a scoped waiver or an inline ignore
+(see [Exceptions](#exceptions)) rather than switching the gate off.
+
+### Skip the per-machine install
+
+Copy `plugins/ship-standards/templates/project-settings.json` to `.claude/settings.json`
+in the repo and commit it. Anyone who opens that repo in Claude Code loads the plugin
+automatically.
+
+### Turn on CI
+
+Copy `plugins/ship-standards/templates/client-workflow.yml` to
+`.github/workflows/standards.yml` in the repo and commit it. That is the whole setup; the
+checks themselves stay centralised here. In a `scope: touched` project, CI compares
+against the pull request's base branch the same way the local gate does.
+
+Once it has run green a few times, pin `@main` to a tag in the client workflow so a rule
+change here cannot turn a client's pipeline red without warning.
+
+The workflow checks out `geletkaplus/claude-standards` by default. If you fork this repo
+to keep your own rules, pass `standards-repo: yourorg/claude-standards` under `with:` in
+the client workflow, and install the plugin from your fork instead.
+
+If you run a private fork, the calling repo's `GITHUB_TOKEN` cannot check it out; pass a
+read-only PAT or GitHub App token through the workflow's `standards_token` secret. The
+`Settings > Actions > General > Access` option governs reusable-workflow access, not the
+checkout, so it is not a substitute.
+
 ## What is in here
 
 ```
@@ -167,39 +236,6 @@ Otherwise the checker would allow something the session would keep arguing about
 
 The reason is mandatory. An ignore without one is not honored, and gets reported as its
 own `should` finding.
-
-## Install
-
-On each machine:
-
-```bash
-claude plugin marketplace add geletkaplus/claude-standards
-claude plugin install ship-standards@geletkaplus
-```
-
-To skip the per-machine install on a given project, copy
-`plugins/ship-standards/templates/project-settings.json` to `.claude/settings.json` in that
-repo and commit it. Anyone who opens that repo in Claude Code loads the plugin
-automatically.
-
-## Turn on CI for a client repo
-
-Copy `plugins/ship-standards/templates/client-workflow.yml` to
-`.github/workflows/standards.yml` in the client repo and commit it. That is the whole
-setup; the checks themselves stay centralised here.
-
-While this repo is public the template works as it stands. If it is ever made private, a
-client repo's `GITHUB_TOKEN` is scoped to itself and cannot check this one out; pass a
-read-only PAT or GitHub App token through the workflow's `standards_token` secret instead.
-The `Settings > Actions > General > Access` option governs reusable-workflow access, not
-the checkout, so it is not a substitute.
-
-Once it has run green a few times, pin `@main` to a tag in the client workflow so a rule
-change here cannot turn a client's pipeline red without warning.
-
-The workflow checks out `geletkaplus/claude-standards` by default. If you fork this repo
-to keep your own rules, pass `standards-repo: yourorg/claude-standards` under `with:` in
-the client workflow, and install the plugin from your fork instead.
 
 ## Test it
 
