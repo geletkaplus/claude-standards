@@ -14,6 +14,13 @@ name: Geletkaplus standards
 on:
   workflow_call:
     inputs:
+      standards-repo:
+        description: >-
+          owner/name of the claude-standards repo to run the checks from. Defaults
+          to the upstream repo, so this works from any org; point it at a fork if
+          you keep your own rules.
+        type: string
+        default: geletkaplus/claude-standards
       standards-ref:
         description: Ref of the claude-standards repo to run the checks from.
         type: string
@@ -53,7 +60,7 @@ jobs:
       - name: Check out the standards
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/claude-standards
+          repository: ${{ inputs.standards-repo }}
           ref: ${{ inputs.standards-ref }}
           path: .ship-standards
           token: ${{ secrets.standards_token || secrets.GITHUB_TOKEN }}

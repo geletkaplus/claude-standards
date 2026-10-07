@@ -16,6 +16,11 @@
 #       uses: geletkaplus/claude-standards/.github/workflows/checks.yml@main
 #       secrets:
 #         standards_token: ${{ secrets.STANDARDS_READ_TOKEN }}
+#
+# Running from a fork with your own rules? Add under the job:
+#
+#       with:
+#         standards-repo: yourorg/claude-standards
 
 name: Standards
 

@@ -170,7 +170,7 @@ own `should` finding.
 
 ## Install
 
-Push this repo to GitHub, then on each machine:
+On each machine:
 
 ```bash
 claude plugin marketplace add geletkaplus/claude-standards
@@ -196,6 +196,10 @@ the checkout, so it is not a substitute.
 
 Once it has run green a few times, pin `@main` to a tag in the client workflow so a rule
 change here cannot turn a client's pipeline red without warning.
+
+The workflow checks out `geletkaplus/claude-standards` by default. If you fork this repo
+to keep your own rules, pass `standards-repo: yourorg/claude-standards` under `with:` in
+the client workflow, and install the plugin from your fork instead.
 
 ## Test it
 
@@ -273,3 +277,7 @@ objectively tell whether it was followed.
   with no replacement, a `div` with a click handler) have rules but no check behind them.
 - **Overlay enforcement.** Platform overlays are prose only. On WordPress, unescaped output
   is called a must and nothing looks for it.
+
+## License
+
+MIT. See `LICENSE`.
