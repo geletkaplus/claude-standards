@@ -11,13 +11,13 @@ const GATE = path.join(__dirname, '..', 'scripts', 'gate.js');
 
 function runGate(mode, input, cwd) {
   try {
-    execFileSync(process.execPath, [GATE, mode], {
+    const stdout = execFileSync(process.execPath, [GATE, mode], {
       cwd, input: JSON.stringify(input), encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe']
     });
-    return { code: 0, stderr: '' };
+    return { code: 0, stdout, stderr: '' };
   } catch (err) {
-    return { code: err.status, stderr: String(err.stderr || '') };
+    return { code: err.status, stdout: String(err.stdout || ''), stderr: String(err.stderr || '') };
   }
 }
 
@@ -47,19 +47,28 @@ test('scope touched: done gate ignores legacy musts', () => {
   const root = makeRepo({ 'legacy.css': BAD_CSS, [CONFIG]: '{ "scope": "touched" }' });
   const r = runGate('done', { cwd: root }, root);
   assert.strictEqual(r.code, 0);
+  assert.strictEqual(r.stdout, '');
 });
 
-test('scope touched: done gate blocks on dirty-file musts', () => {
+test('scope touched: done gate lists dirty-file musts without blocking', () => {
   const root = makeRepo({ [CONFIG]: '{ "scope": "touched" }' });
   writeFiles(root, { 'new.css': BAD_CSS });
   const r = runGate('done', { cwd: root }, root);
-  assert.strictEqual(r.code, 2);
-  assert.match(r.stderr, /new\.css/);
+  assert.strictEqual(r.code, 0);
+  assert.match(JSON.parse(r.stdout).systemMessage, /new\.css/);
 });
 
-test('scope repo: done gate hints at touched when only untouched files offend', () => {
-  const root = makeRepo({ 'legacy.css': BAD_CSS, [CONFIG]: '{}' });
+test('done gate lists open TKTKs without blocking', () => {
+  const root = makeRepo({ [CONFIG]: '{}', 'a.html': '<p>[TKTK: hero copy from client]</p>\n' });
   const r = runGate('done', { cwd: root }, root);
-  assert.strictEqual(r.code, 2);
-  assert.match(r.stderr, /scope.*touched/i);
+  assert.strictEqual(r.code, 0);
+  assert.match(JSON.parse(r.stdout).systemMessage, /a\.html:1/);
+});
+
+test('done gate stays quiet when the list has not changed', () => {
+  const root = makeRepo({ [CONFIG]: '{}', 'a.html': '<p>[TKTK: hero copy from client]</p>\n' });
+  assert.notStrictEqual(runGate('done', { cwd: root }, root).stdout, '');
+  assert.strictEqual(runGate('done', { cwd: root }, root).stdout, '');
+  writeFiles(root, { 'b.css': BAD_CSS });
+  assert.match(JSON.parse(runGate('done', { cwd: root }, root).stdout).systemMessage, /b\.css/);
 });

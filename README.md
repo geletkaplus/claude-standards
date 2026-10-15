@@ -115,9 +115,11 @@ most once every twelve prompts. Nobody has to invoke, remember, or read anything
 is written and refuses the edit on a `must`, while there is still context to fix it
 cheaply. It runs at `build` stage, so `[TKTK: ...]` markers are legal here.
 
-**Completion blocked while anything is outstanding.** A `Stop` hook runs the full suite over
-the repo at `done` stage, unresolved `TKTK` markers included. A `must` blocks outright; a
-`should` blocks once, so it gets named rather than quietly skipped.
+**Outstanding work listed, not argued about.** A `Stop` hook runs the full suite over the
+repo at `done` stage, unresolved `TKTK` markers included, and prints what is not yet up to
+standard as a plain list. It never blocks, and it stays silent until the list changes. A
+`TKTK` waiting on client copy cannot be fixed by reminding anyone; CI is what keeps it out
+of production.
 
 **CI as the gate that cannot be bypassed.** The first three run on someone's machine and can
 be turned off. CI runs on push, is controlled entirely by whoever owns the repo, and does not
@@ -131,15 +133,14 @@ it sounds: the fastest way to make people ignore checks is to have local pass an
 Every rule carries a tier, so the tool can be strict about the things that matter and
 quiet about the things that are judgment calls.
 
-| Tier | Blocks an edit | Blocks completion | Fails CI |
+| Tier | Blocks an edit | End of turn | Fails CI |
 |---|---|---|---|
-| `must` | yes | yes | yes |
-| `should` | no | surfaced once, to be named out loud | only with `fail-on: should` |
+| `must` | yes | listed | yes |
+| `should` | no | listed | only with `fail-on: should` |
 | `consider` | no | no | no |
 
 A `should` is not permission to skip a rule. It is permission to skip it *out loud*.
-The `Stop` gate blocks once on outstanding `should` findings, which forces them to be
-named rather than quietly dropped, then lets the session proceed.
+The `Stop` list keeps every outstanding `should` in view, so none gets quietly dropped.
 
 ## What gets checked
 
@@ -275,10 +276,6 @@ Anyone can disable a local hook anyway, and a documented switch beats someone un
 the plugin the first time it gets in their way at midnight. CI has no such switch, which
 is why CI is the one that matters.
 
-The `Stop` hook honours `stop_hook_active`, so it blocks once and then lets the session work
-through the result. Without that you can build an inescapable loop, which is worse than a
-missed check.
-
 Both scripts fail open. A broken hook, a missing standards file, malformed input, or a crash
 all result in exit 0 and no interference.
 
@@ -291,7 +288,7 @@ all result in exit 0 and no interference.
 2. Bump `version` in `plugins/ship-standards/.claude-plugin/plugin.json` and
    `.claude-plugin/marketplace.json`.
 3. Commit and push. `ci.yml` runs the tests, the self-check, and confirms the two version
-   fields agree. When it is green, tag the release (`git tag v0.5.0 && git push --tags`).
+   fields agree. When it is green, tag the release (`git tag v0.6.0 && git push --tags`).
    Others pick it up with `claude plugin update ship-standards`; client CI picks it up on
    the next run, or when they move their pin to the new tag.
 

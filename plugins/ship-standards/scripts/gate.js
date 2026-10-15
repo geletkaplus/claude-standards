@@ -10,22 +10,24 @@
  *                  "build" stage, so [TKTK: ...] is still legal. Blocks on must
  *                  only, while there is still context to fix it cheaply.
  *
- *   gate.js done   Stop. Full suite at "done" stage over the repo. Blocks on must.
- *                  Should-level findings do not block; they are surfaced once so
- *                  they get named out loud instead of quietly skipped.
+ *   gate.js done   Stop. Full suite at "done" stage over the repo. Never blocks:
+ *                  prints the outstanding findings as a plain list to the person,
+ *                  and only when the list differs from the last one shown. An
+ *                  open [TKTK: ...] waiting on client copy cannot be fixed by
+ *                  nagging, so it is tallied, not argued about. CI is the gate.
  *
- * Blocking works by exiting 2 with the reason on stderr, which is fed back to
- * Claude to act on rather than shown as a crash.
+ * Blocking (edit mode only) works by exiting 2 with the reason on stderr, which
+ * is fed back to Claude to act on rather than shown as a crash.
  *
- * Escape hatches, on purpose:
- *   - stop_hook_active: if Stop already fired once and Claude is working through
- *     the result, do not block again. Otherwise you can build an inescapable loop.
+ * Escape hatch, on purpose:
  *   - SHIP_STANDARDS_SKIP=1 bypasses everything. A determined person can disable a
  *     local hook anyway; a documented switch beats an uninstall at midnight.
  */
 
 const { execFileSync } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const MODE = process.argv[2] === 'done' ? 'done' : 'edit';
@@ -78,6 +80,26 @@ function list(findings) {
     .join('\n');
 }
 
+/*
+ * Remembers the last list shown for this repo so an unchanged list stays quiet.
+ * Keyed on rule, file, and line text rather than line number, so edits elsewhere
+ * in a file do not make old findings look new. Losing the file is harmless; it
+ * means the list is shown once more.
+ */
+function changedSinceLastShown(cwd, findings) {
+  const key = crypto.createHash('sha1').update(String(cwd)).digest('hex').slice(0, 16);
+  const statePath = path.join(os.tmpdir(), 'gk-ship-standards-tally-' + key);
+  const digest = crypto.createHash('sha1')
+    .update(findings.map((f) => f.rule + '|' + f.file + '|' + (f.excerpt || f.message))
+      .sort().join('\n'))
+    .digest('hex');
+  let last = null;
+  try { last = fs.readFileSync(statePath, 'utf8'); } catch (err) { /* first run */ }
+  if (last === digest) return false;
+  try { fs.writeFileSync(statePath, digest, 'utf8'); } catch (err) { /* non-fatal */ }
+  return true;
+}
+
 function block(message) {
   process.stderr.write(message);
   process.exit(2);
@@ -102,44 +124,24 @@ function main() {
   } catch (err) { /* invalid config already reported by the checker; treat as repo */ }
 
   if (MODE === 'done') {
-    // Already blocked once this turn; let Claude finish acting on that.
-    if (input.stop_hook_active) process.exit(0);
-
     const args = ['--all', '--stage', 'done', '--root', cwd, '--json'];
     if (scope === 'touched') args.push('--touched');
     const result = runChecks(args, cwd);
     if (!result) process.exit(0);
 
-    const must = result.findings.filter((f) => f.severity === 'must');
-    if (must.length) {
-      let hint = '';
-      if (scope !== 'touched' && result.scope === 'repo') {
-        // If every offender is a committed, unmodified file, the debt predates this
-        // work; name the fix instead of only dumping the list.
-        const touchedResult = runChecks(
-          ['--all', '--stage', 'done', '--root', cwd, '--touched', '--json'], cwd);
-        if (touchedResult && touchedResult.scope === 'touched' &&
-            !touchedResult.findings.some((f) => f.severity === 'must')) {
-          hint = '\nAll of these predate the current work. If this is an inherited ' +
-            'codebase, set "scope": "touched" in .claude/ship-standards.json.\n';
-        }
-      }
-      block(
-        'Not done. These must be fixed:\n\n' + list(must) +
-        '\n\nFix them, then finish. Do not call this complete while any remain.\n' + hint
-      );
-    }
+    const open = result.findings.filter((f) => f.severity !== 'consider');
+    if (!changedSinceLastShown(cwd, open)) process.exit(0);
+    if (!open.length) process.exit(0);
 
-    const should = result.findings.filter((f) => f.severity === 'should');
-    if (should.length) {
-      block(
-        'These are outstanding:\n\n' + list(should) +
-        '\n\nFix them, or name each one you are leaving and why. Do not go quiet ' +
-        'on them. If one is settled policy on this project, waive it in ' +
-        '.claude/ship-standards.json with a reason and an approver.\n'
-      );
-    }
-
+    const rank = { must: 0, should: 1 };
+    open.sort((a, b) => rank[a.severity] - rank[b.severity]);
+    // systemMessage goes to the person, not back to Claude, so it informs without
+    // starting a conversation about copy nobody here can supply.
+    process.stdout.write(JSON.stringify({
+      systemMessage: 'Not yet up to standard (' + open.length + '):\n' +
+        open.map((f) => '  [' + f.severity + '] ' + f.file + ':' + f.line + '  ' +
+          f.message).join('\n')
+    }));
     process.exit(0);
   }
 

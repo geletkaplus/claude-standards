@@ -3,7 +3,7 @@
 These rules apply to a five-minute change and a full site build alike, and stay in force
 without being restated. Each one is tagged with how hard it is:
 
-- `[must]` Not negotiable. Blocks the edit, blocks completion, fails CI.
+- `[must]` Not negotiable. Blocks the edit, fails CI.
 - `[should]` A real standard with real exceptions. If you leave one, say which and why.
 - `[consider]` Advice. Follow it absent a reason not to. Never blocks anything.
 
@@ -23,7 +23,8 @@ If a request conflicts with a rule here, follow the rule and say so in one line.
 
 Work is not finished until all of these are true. Only say it is done when they are.
 
-- No placeholder content of any kind remains.
+- No placeholder content of any kind remains. An open `[TKTK: ...]` waiting on the client
+  is tracked, not nagged: mention it once when you write it, then leave it to the list.
 - Every data source the site displays is connected and returning real data.
 - The project builds clean, with no new warnings.
 - Every interactive element is reachable and operable by keyboard.

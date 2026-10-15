@@ -21,7 +21,7 @@
  *   done   everything, including "no unfinished markers left" (the default)
  *
  * Severity:
- *   must      never negotiable; blocks edits, blocks completion, fails CI
+ *   must      never negotiable; blocks edits, listed at end of turn, fails CI
  *   should    real standards with real exceptions; reported and acknowledged
  *   consider  advice; printed once, gates nothing
  *
